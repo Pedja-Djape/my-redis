@@ -130,6 +130,7 @@ int main() {
         die("listen()");
     }
 
+    int client_id = 0;
     while (true) {
         // accept
         struct sockaddr_in client_addr = {};
@@ -139,14 +140,15 @@ int main() {
         if (connfd < 0) {
             continue;   // error
         }
-
+        ++client_id;
+        std::cout << "Accepted client " << client_id << "'s connection and processing msg \n";
         while (true) {
             int32_t err = one_request(connfd);
             if (err) {
                 break;
             }
         }
-
+        std::cout << "Closing client " << client_id << "'s connection\n";
         close(connfd);
     }
 
