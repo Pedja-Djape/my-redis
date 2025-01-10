@@ -67,7 +67,6 @@ static Conn *handle_accept(int fd) {
 }
 
 static void buf_append(std::vector<uint8_t> &buf, const uint8_t *data, size_t len) {
-    std::string data_str(data, data + len);
     buf.insert(buf.end(), data, data + len);
 }
 
@@ -208,7 +207,7 @@ int main() {
             poll_args.push_back(pfd);
         }
 
-        // wait for readiness
+        // wait for readiness - BLOCKING
         int rv = poll(poll_args.data(), (nfds_t)poll_args.size(), -1);
         // if a process receives a unix signal during a blocking syscall, the syscall
         // is immediately returned with EINTR to give the process a chance to handle
