@@ -25,7 +25,7 @@ static void die(const char *msg) {
 }
 
 // max msg size
-const size_t k_max_msg = 4096;
+const size_t k_max_msg = 32 << 20;
 
 struct Conn {
     int fd = -1;
@@ -98,11 +98,31 @@ static bool try_one_request(Conn *conn) {
     // generate the response (echo)
     buf_append(conn->outgoing, (const uint8_t *) &len, 4);
     buf_append(conn->outgoing, request, len);
-    // process to next message
+    
+    // 5. Remove the message from `Conn::incoming`
     buf_consume(conn->incoming, 4 + len);
     return true; // success
 }
 
+static void handle_write(Conn *conn) {
+    assert(conn->outgoing.size() > 0);
+    ssize_t rv = write(conn->fd, conn->outgoing.data(), conn->outgoing.size());
+    // error handling
+    if (rv < 0) {
+        if (errno == EAGAIN) {
+            return; // not ready
+        }
+        conn->want_close = true;
+        return;
+    }
+    // remove written data from `outgoing`
+    buf_consume(conn->outgoing, (size_t) rv);
+
+    if (conn->outgoing.size() == 0) {
+        conn->want_write = false;
+        conn->want_read = true;
+    }
+}
 
 static void handle_read(Conn *conn) {
     // 1. Do a non blocking read
@@ -118,7 +138,7 @@ static void handle_read(Conn *conn) {
     // 3. Try to parse the accumulated buffer
     // 4. Process the parsed message
     // 5. Remove the message from `Conn::incoming`
-    
+
     // in case there is more than one request in the buffer, 
     // keep consuming from it until there's nothing left to do
     while (try_one_request(conn)) {};
@@ -127,26 +147,9 @@ static void handle_read(Conn *conn) {
     if (conn->outgoing.size() > 0) {
         conn->want_read = false;
         conn->want_write = true;
+        return handle_write(conn);
     }
 }
-
-static void handle_write(Conn *conn) {
-    assert(conn->outgoing.size() > 0);
-    ssize_t rv = write(conn->fd, conn->outgoing.data(), conn->outgoing.size());
-    // error handling
-    if (rv < 0) {
-        conn->want_close = true;
-        return;
-    }
-    // remove written data from `outgoing`
-    buf_consume(conn->outgoing, (size_t) rv);
-
-    if (conn->outgoing.size() == 0) {
-        conn->want_write = false;
-        conn->want_read = true;
-    }
-}
-
 
 int main() {
     // doesn't create the socket just yet
